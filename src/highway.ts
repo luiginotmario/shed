@@ -31,6 +31,8 @@ export class Highway {
   private flashes: Flash[] = [];
   private lastT = 0;
   private gradeOf = new Map<Note, Grade>();
+  /** Tab order puts the thinnest string on top; by default the thickest is, as seen looking down at the guitar. */
+  tabOrder = false;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -60,9 +62,10 @@ export class Highway {
     return Math.min(280, Math.max(170, this.w / 5));
   }
 
-  private laneY(s: number) {
+  private laneY(string: number) {
     // Lanes stay a comfortable distance apart and center on tall screens.
     const n = this.song.tuning.length;
+    const s = this.tabOrder ? string : n - 1 - string;
     const room = this.h - 104;
     const gap = Math.min(76, room / n);
     return 64 + (room - gap * n) / 2 + gap * (s + 0.5);
@@ -101,7 +104,8 @@ export class Highway {
     const x = (time: number) => nut + (time - t) * pps;
     const t0 = t - nut / pps - 0.5;
     const t1 = t + (w - nut) / pps + 0.5;
-    const top = this.laneY(0) - 22, bottom = this.laneY(this.song.tuning.length - 1) + 22;
+    const ys = [this.laneY(0), this.laneY(this.song.tuning.length - 1)];
+    const top = Math.min(...ys) - 22, bottom = Math.max(...ys) + 22;
 
     this.drawMeasures(x, t0, t1, top, bottom);
     this.drawStrings(nut, w);
@@ -251,16 +255,22 @@ export class Highway {
     ctx.beginPath();
     ctx.roundRect(nut - 3, top - 10, 6, bottom - top + 20, 2);
     ctx.fill();
-    // Open-string names, like the letters at the start of a tab staff.
-    ctx.font = '500 11px "Geist Mono", monospace';
+    // String number (1 = thinnest) and the open note, e.g. "6 E".
     ctx.textBaseline = 'middle';
-    ctx.textAlign = 'center';
     for (let s = 0; s < this.song.tuning.length; s++) {
       const y = this.laneY(s);
       ctx.fillStyle = GROUND;
-      ctx.fillRect(6, y - 8, 28, 16);
-      ctx.fillStyle = `rgba(${BONE}, 0.55)`;
-      ctx.fillText(noteName(this.song.tuning[s]), 20, y + 0.5);
+      ctx.fillRect(4, y - 9, 44, 18);
+      ctx.textAlign = 'right';
+      ctx.font = '500 13px "Geist Mono", monospace';
+      ctx.fillStyle = `rgba(${BONE}, 0.9)`;
+      ctx.fillText(String(s + 1), 22, y + 0.5);
+      ctx.textAlign = 'left';
+      ctx.font = '400 11px "Geist Mono", monospace';
+      ctx.fillStyle = `rgba(${BONE}, 0.5)`;
+      // Guitarists write the thinnest string as a small "e" to tell it from the low E.
+      const name = noteName(this.song.tuning[s]);
+      ctx.fillText(s === 0 && name === 'E' ? 'e' : name, 28, y + 0.5);
     }
     ctx.textAlign = 'start';
   }
@@ -286,7 +296,7 @@ export class Highway {
 
   private drawCountIn(nut: number, beatsLeft: number) {
     const { ctx } = this;
-    const mid = (this.laneY(0) + this.laneY(this.song.tuning.length - 1)) / 2;
+    const mid = (this.laneY(0) + this.laneY(this.song.tuning.length - 1)) / 2; // order-independent
     ctx.font = '500 56px "Geist Mono", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';

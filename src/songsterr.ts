@@ -1,4 +1,4 @@
-import { parseTrack, type RawTrack, type Song } from './tab';
+import { parseTrack, tuningAdvice, type RawTrack, type Song } from './tab';
 
 // Search and metadata go through the same-origin /songsterr proxy (see
 // vite.config.ts and vercel.json). Tab JSON comes from their CDN directly.
@@ -11,6 +11,7 @@ export interface TrackInfo {
   instrumentId: number;
   tuning?: number[];
   difficulty?: number;
+  views: number;
 }
 
 export interface SongInfo {
@@ -33,6 +34,7 @@ interface RawSongTrack {
   name?: string;
   tuning?: number[];
   difficulty?: number;
+  views?: number;
   isVocalTrack?: boolean;
   isEmpty?: boolean;
 }
@@ -52,24 +54,54 @@ export const isGuitar = (t: { instrumentId: number }) => t.instrumentId >= 24 &&
 const playable = (t: RawSongTrack) =>
   t.instrumentId !== 1024 && !t.isVocalTrack && !t.isEmpty && (t.tuning?.length ?? 0) >= 4;
 
+const ROLE = /lead|rhythm|solo|riff|guitar|bass|acoustic|clean|chords?|melody|intro|fill/i;
+
+/**
+ * Tab authors pack player, gear and role into one name ("Jack White | Kay
+ * Archtop | Lead Guitar"). Keep the part that says what the track plays.
+ */
+export function partName(name: string | undefined, instrument: string): string {
+  const parts = (name ?? '')
+    .split(/\s+[|/–-]\s+|\s*\|\s*/)
+    .map((p) => p.replace(/^["'(]+|["')]+$/g, '').trim())
+    .filter(Boolean);
+  const role = parts.find((p) => ROLE.test(p));
+  return role ?? parts[parts.length - 1] ?? instrument;
+}
+
+/** Tracks a normally tuned guitar can play without turning a peg. */
+const noRetune = (t: TrackInfo) => !!t.tuning && !tuningAdvice(t.tuning).retune;
+
 function toInfo(s: RawSong): SongInfo {
   const tracks = s.tracks
     .map((t, index) => ({ t, index }))
     .filter(({ t }) => playable(t))
     .map(({ t, index }) => ({
       index,
-      name: t.name?.trim() || t.instrument,
+      name: partName(t.name, t.instrument),
       instrument: t.instrument,
       instrumentId: t.instrumentId,
       tuning: t.tuning,
       difficulty: t.difficulty,
+      views: t.views ?? 0,
     }));
+  // Same names ("Lead Guitar" twice) get numbered so the menu is unambiguous.
+  const seen = new Map<string, number>();
+  for (const t of tracks) seen.set(t.name, (seen.get(t.name) ?? 0) + 1);
+  const count = new Map<string, number>();
+  for (const t of tracks) {
+    if (seen.get(t.name)! < 2) continue;
+    count.set(t.name, (count.get(t.name) ?? 0) + 1);
+    t.name = `${t.name} ${count.get(t.name)}`;
+  }
+
+  // Default to the most played guitar part that needs no retuning.
+  const guitars = tracks.filter(isGuitar);
   const preferred = s.popularTrackGuitar ?? s.popularTrack ?? s.defaultTrack;
+  const popular = guitars.find((t) => t.index === preferred);
+  const easy = [...guitars].filter(noRetune).sort((a, b) => b.views - a.views)[0];
   const guitarTrack =
-    tracks.find((t) => t.index === preferred && isGuitar(t))?.index ??
-    tracks.find(isGuitar)?.index ??
-    tracks[0]?.index ??
-    0;
+    (popular && noRetune(popular) ? popular : easy ?? popular ?? guitars[0] ?? tracks[0])?.index ?? 0;
   return { songId: s.songId, title: s.title, artist: s.artist, tracks, guitarTrack };
 }
 

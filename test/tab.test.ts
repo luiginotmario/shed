@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { measureAt, parseTrack, tuningLabel, type RawTrack } from '../src/tab';
+import { measureAt, parseTrack, tuningAdvice, type RawTrack } from '../src/tab';
 
 const bar = (beats: RawTrack['measures'][0]['voices'][0]['beats'], extra = {}) => ({ voices: [{ beats }], ...extra });
 const q = (string: number, fret: number, more = {}) => ({ notes: [{ string, fret, ...more }], duration: [1, 4] as [number, number] });
@@ -77,11 +77,24 @@ describe('parseTrack', () => {
   });
 });
 
-describe('tuningLabel', () => {
-  it('names common tunings', () => {
-    expect(tuningLabel([64, 59, 55, 50, 45, 40])).toBe('E standard');
-    expect(tuningLabel([64, 59, 55, 50, 45, 38])).toBe('Drop D');
-    expect(tuningLabel([63, 58, 54, 49, 44, 39])).toBe('E♭ standard');
-    expect(tuningLabel([62, 57, 53, 48, 43, 38])).toBe('D standard');
+describe('tuningAdvice', () => {
+  it('only asks to retune when frets would land on wrong notes', () => {
+    expect(tuningAdvice([64, 59, 55, 50, 45, 40])).toMatchObject({ label: 'Standard tuning', retune: false });
+    // Tuned down evenly or an octave down: same frets on a standard guitar.
+    expect(tuningAdvice([62, 57, 53, 48, 43, 38]).retune).toBe(false);
+    expect(tuningAdvice([50, 45, 41, 36, 31, 26]).play).toEqual([64, 59, 55, 50, 45, 40]);
+    expect(tuningAdvice([64, 59, 55, 50, 45, 38])).toMatchObject({ label: 'Drop D', retune: true });
+    expect(tuningAdvice([62, 57, 53, 48, 43, 36])).toMatchObject({ label: 'Drop D', play: [64, 59, 55, 50, 45, 38] });
+    expect(tuningAdvice([64, 61, 57, 52, 45, 40])).toMatchObject({ label: 'Special tuning', retune: true });
+  });
+});
+
+import { partName } from '../src/songsterr';
+describe('partName', () => {
+  it('keeps the role and drops player and gear', () => {
+    expect(partName('Jack White | Kay Archtop Hollow-Body | Lead Guitar', 'Overdriven Guitar')).toBe('Lead Guitar');
+    expect(partName('Kevin Parker - Lead Guitar - Squier J Mascis', 'x')).toBe('Lead Guitar');
+    expect(partName('Jack White | Kay Archtop Hollow-Body | "Bass"', 'x')).toBe('Bass');
+    expect(partName('', 'Distortion Guitar')).toBe('Distortion Guitar');
   });
 });

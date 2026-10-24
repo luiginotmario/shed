@@ -190,20 +190,74 @@ export function parseTrack(track: RawTrack): Song {
 const NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
 export const noteName = (midi: number) => NAMES[((midi % 12) + 12) % 12];
 
-/** "E standard", "Drop D", or the open notes low → high. */
-export function tuningLabel(tuning: number[]): string {
-  const std = [64, 59, 55, 50, 45, 40];
-  if (tuning.length === 6) {
-    const diff = tuning.map((m, i) => m - std[i]);
-    const same = diff.every((d) => d === diff[0]);
-    if (same && diff[0] === 0) return 'E standard';
-    if (same && diff[0] === -1) return 'E♭ standard';
-    if (same && diff[0] === -2) return 'D standard';
-    if (same && diff[0] === -12) return 'E standard, octave down';
-    const drop = diff.slice(0, 5).every((d) => d === diff[0]) && diff[5] === diff[0] - 2;
-    if (drop) return `Drop ${noteName(tuning[5])}`;
+export const STANDARD = [64, 59, 55, 50, 45, 40];
+
+export interface TuningAdvice {
+  /** Short name, e.g. "Standard tuning". */
+  label: string;
+  /** What a beginner with a normally tuned guitar should do, in plain words. */
+  detail: string;
+  /** True when the player has to turn a peg before playing. */
+  retune: boolean;
+  /** Open-string pitches of the player's guitar after following the advice. */
+  play: number[];
+}
+
+const halfSteps = (n: number) => (n === 1 ? 'a half step' : n === 2 ? 'a whole step' : `${n} half steps`);
+
+/**
+ * Turns a tuning into advice for someone holding a normally tuned guitar.
+ * A tab tuned down evenly (or an octave down) is played with the same frets
+ * in standard tuning; only drop and special tunings need a peg turned.
+ */
+export function tuningAdvice(tuning: number[]): TuningAdvice {
+  if (tuning.length !== 6) {
+    return {
+      label: `${tuning.length}-string tuning`,
+      detail: `This part is written for a ${tuning.length}-string instrument, so some notes won't fit on a normal guitar.`,
+      retune: true,
+      play: tuning,
+    };
   }
-  return [...tuning].reverse().map(noteName).join(' ');
+  const diff = tuning.map((m, i) => m - STANDARD[i]);
+  const upper = diff.slice(0, 5);
+  const even = upper.every((d) => d === upper[0]);
+  const drop = even ? diff[5] - upper[0] : NaN;
+  // How far below standard the record sounds, ignoring whole octaves.
+  const down = even ? ((-upper[0] % 12) + 12) % 12 : 0;
+  const lower = down
+    ? ` The record is tuned ${halfSteps(down)} lower, so yours will sound a little higher. That's fine.`
+    : '';
+
+  if (even && drop === 0) {
+    return {
+      label: down ? 'Standard tuning (record is lower)' : 'Standard tuning',
+      detail: `Your guitar's normal tuning. Nothing to change.${lower}`,
+      retune: false,
+      play: STANDARD,
+    };
+  }
+  if (even && drop === -2) {
+    return {
+      label: 'Drop D',
+      detail: `Tune your thickest string (6) down to D: turn its peg slowly until it sounds like string 4, only lower.${lower}`,
+      retune: true,
+      play: [...STANDARD.slice(0, 5), 38],
+    };
+  }
+  const names = [...tuning].reverse().map(noteName).join(' ');
+  return {
+    label: 'Special tuning',
+    detail: `Tune your strings, thickest to thinnest, to ${names}. A tuner app makes this easy.`,
+    retune: true,
+    play: tuning,
+  };
+}
+
+/** Plays the song on the player's guitar: same frets, their tuning. */
+export function retune(song: Song, play: number[]) {
+  song.tuning = play;
+  for (const n of song.notes) n.midi = (play[n.string] ?? 40) + n.fret;
 }
 
 /** Index of the measure playing at time t. */

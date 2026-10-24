@@ -1,5 +1,5 @@
 import { isGuitar, searchSongs, type SongInfo } from './songsterr';
-import { tuningLabel } from './tab';
+import { tuningAdvice } from './tab';
 
 const SUGGESTIONS = ['Seven Nation Army', 'Smoke on the Water', 'Come As You Are', 'Let It Happen', 'Wonderwall', 'Back in Black'];
 
@@ -92,7 +92,7 @@ export function mountSearch(root: HTMLElement, open: (songId: number) => void, i
             <div class="truncate text-[14px] text-dim">${esc(s.artist)}</div>
           </div>
           <div class="hidden shrink-0 text-right font-mono text-[11px] text-faint sm:block">
-            <div>${guitar?.tuning ? esc(tuningLabel(guitar.tuning)) : ''}</div>
+            <div>${guitar?.tuning ? esc(tuningAdvice(guitar.tuning).label.replace(' (record is lower)', '')) : ''}</div>
             <div>${parts} guitar part${parts === 1 ? '' : 's'}</div>
           </div>
           <div class="w-4 shrink-0">${difficulty(guitar?.difficulty)}</div>

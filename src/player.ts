@@ -15,7 +15,7 @@ import { Highway } from './highway';
 import { PipOverlay } from './pip';
 import { rememberSong } from './search';
 import { isGuitar, loadSong, type LoadedSong } from './songsterr';
-import { lowerBound, measureAt, tuningLabel } from './tab';
+import { lowerBound, measureAt, retune, tuningAdvice } from './tab';
 import type { Camera } from './vision/camera';
 import type { VisionFrame } from './vision/protocol';
 
@@ -35,8 +35,10 @@ interface Prefs {
   camera: boolean;
   leftHanded: boolean;
   neck: Neck | null;
+  tabOrder: boolean;
+  seenGuide: boolean;
 }
-const DEFAULTS: Prefs = { speed: 70, click: true, guide: true, camera: false, leftHanded: false, neck: null };
+const DEFAULTS: Prefs = { speed: 70, click: true, guide: true, camera: false, leftHanded: false, neck: null, tabOrder: false, seenGuide: false };
 function readPrefs(): Prefs {
   try {
     return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') };
@@ -66,7 +68,10 @@ const template = () => `
       <div id="artist" class="truncate text-[12px] text-dim"></div>
     </div>
     <div class="ml-auto flex items-center gap-3">
-      <span id="tuning" class="hidden font-mono text-[11px] text-faint lg:block"></span>
+      <button id="tuning" class="press hidden h-9 items-center gap-2 rounded-lg px-2.5 text-[13px] text-dim hover:bg-raise hover:text-bone md:flex">
+        <span id="tuning-label"></span>
+        <span class="grid size-[18px] place-items-center rounded-full border border-line-strong font-mono text-[10px]" aria-hidden="true">?</span>
+      </button>
       <select id="track" aria-label="Guitar part" class="track press h-9 max-w-[42vw] truncate rounded-lg border border-line-strong bg-raise pl-3 text-[13px] text-bone sm:max-w-[300px]"></select>
     </div>
   </header>
@@ -79,6 +84,21 @@ const template = () => `
         <button id="skip" class="press rounded-lg border border-line-strong px-3 py-1.5 text-bone hover:bg-raise">Skip ahead</button>
       </div>
       <div id="loading" class="absolute inset-0 grid place-items-center text-[13px] text-dim">Loading tab…</div>
+      <div id="howto" hidden class="absolute inset-0 grid place-items-center bg-ground/70 p-4 backdrop-blur-[2px]">
+        <div class="reveal w-full max-w-[460px] rounded-xl border border-line-strong bg-raise p-5 sm:p-6" role="dialog" aria-labelledby="howto-title">
+          <h2 id="howto-title" class="text-[17px] font-semibold tracking-[-0.01em]">How to read this</h2>
+          <ol class="mt-4 grid gap-3.5 text-[14px] leading-snug text-dim">
+            <li class="grid grid-cols-[22px_1fr]"><span class="font-mono text-faint">1</span><span><span class="text-bone">Each line is one string.</span> <span id="howto-order"></span> The number on the left is the string: 6 is the thickest, 1 the thinnest.</span></li>
+            <li class="grid grid-cols-[22px_1fr]"><span class="font-mono text-faint">2</span><span><span class="text-bone">The number in the box is the fret to press</span> on that string. 0 means play it without pressing anything. × means mute it.</span></li>
+            <li class="grid grid-cols-[22px_1fr]"><span class="font-mono text-faint">3</span><span><span class="text-bone">Pick the string when the box reaches the white bar.</span> Outlined boxes are hammer-ons: don't pick, just press.</span></li>
+            <li class="grid grid-cols-[22px_1fr]"><span class="font-mono text-faint">4</span><span><span id="howto-tuning-label" class="text-bone"></span> <span id="howto-tuning"></span></span></li>
+          </ol>
+          <div class="mt-6 flex items-center justify-between gap-3">
+            <button id="howto-flip" class="text-[12px] text-faint underline decoration-line-strong underline-offset-4 hover:text-dim"></button>
+            <button id="howto-ok" class="press rounded-lg bg-bone px-4 py-2 text-[13px] font-medium text-ground">Got it</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <aside class="flex min-h-0 gap-4 border-line p-4 max-lg:items-start max-lg:border-t lg:flex-col lg:gap-5 lg:border-l">
@@ -419,6 +439,10 @@ export function mountPlayer(
   };
 
   const onKey = (e: KeyboardEvent) => {
+    if (!howto.hidden) {
+      if (e.key === 'Escape') closeHowto();
+      return;
+    }
     const tag = (e.target as HTMLElement).tagName;
     if (tag === 'SELECT' || tag === 'INPUT') return;
     if (e.key === ' ') {
@@ -513,6 +537,37 @@ export function mountPlayer(
     }
   };
 
+  // ───────── How to read this ─────────
+  const howto = $('howto');
+  const syncOrder = () => {
+    $('howto-order').textContent = prefs.tabOrder
+      ? 'The thinnest string is on top, like printed tab.'
+      : 'The thickest string is on top, like when you look down at your guitar.';
+    $('howto-flip').textContent = prefs.tabOrder ? 'Put the thickest string on top' : 'Use tab order (thinnest on top)';
+  };
+  const openHowto = () => {
+    if (transport.playing) {
+      transport.pause();
+      syncPlay();
+    }
+    howto.hidden = false;
+    $('howto-ok').focus();
+  };
+  const closeHowto = () => {
+    howto.hidden = true;
+    prefs.seenGuide = true;
+    savePrefs(prefs);
+  };
+  $('tuning').onclick = openHowto;
+  $('howto-ok').onclick = closeHowto;
+  howto.onclick = (e) => e.target === howto && closeHowto();
+  $('howto-flip').onclick = () => {
+    prefs.tabOrder = !prefs.tabOrder;
+    if (highway) highway.tabOrder = prefs.tabOrder;
+    savePrefs(prefs);
+    syncOrder();
+  };
+
   // ───────── Load ─────────
   (async () => {
     try {
@@ -523,9 +578,16 @@ export function mountPlayer(
       document.title = `${l.title} · Shed`;
       $('title').textContent = l.title;
       $('artist').textContent = l.artist;
-      $('tuning').textContent = tuningLabel(l.song.tuning);
+      // Play the tab on the player's guitar: same frets, their tuning.
+      const advice = tuningAdvice(l.song.tuning);
+      retune(l.song, advice.play);
+      $('tuning-label').textContent = advice.label;
+      $('howto-tuning-label').textContent = `${advice.label}.`;
+      $('howto-tuning').textContent = advice.detail;
       const opt = (t: LoadedSong['tracks'][0]) =>
-        `<option value="${t.index}" ${t.index === l.track.index ? 'selected' : ''}>${esc(t.name)}</option>`;
+        `<option value="${t.index}" ${t.index === l.track.index ? 'selected' : ''}>${esc(t.name)}${
+          t.tuning && tuningAdvice(t.tuning).retune ? ` · ${tuningAdvice(t.tuning).label}` : ''
+        }</option>`;
       const guitars = l.tracks.filter(isGuitar), others = l.tracks.filter((t) => !isGuitar(t));
       $('track').innerHTML =
         `<optgroup label="Guitar">${guitars.map(opt).join('')}</optgroup>` +
@@ -542,6 +604,10 @@ export function mountPlayer(
       transport.load(l.song);
       grader = new Grader(l.song);
       highway = new Highway($<HTMLCanvasElement>('hw'), l.song);
+      highway.tabOrder = prefs.tabOrder;
+      syncOrder();
+      // First visit, or a song that needs a peg turned: explain before playing.
+      if (!prefs.seenGuide || advice.retune) openHowto();
       // Start a bar before the first note when the part comes in late.
       const first = l.song.hits[0];
       if (first && first.t > LONG_REST) seek(l.song.measures[Math.max(0, measureAt(l.song, first.t) - 1)].t);
