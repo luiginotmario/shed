@@ -11,6 +11,7 @@ import {
   StrokeDetector,
   type Neck,
 } from './coach';
+import { Fretboard } from './fretboard';
 import { Highway } from './highway';
 import { PipOverlay } from './pip';
 import { rememberSong } from './search';
@@ -77,19 +78,25 @@ const template = () => `
   </header>
 
   <div class="grid min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_300px] lg:grid-rows-1">
-    <div class="relative min-h-[320px]">
+    <div class="relative grid min-h-[420px] grid-rows-[minmax(0,1fr)_auto]">
+    <div class="relative min-h-0">
       <canvas id="hw" class="absolute inset-0 size-full" aria-label="Tab"></canvas>
       <div id="rest" hidden class="absolute inset-x-0 bottom-6 flex items-center justify-center gap-3 text-[13px] text-dim">
         <span id="rest-text" class="tnum"></span>
         <button id="skip" class="press rounded-lg border border-line-strong px-3 py-1.5 text-bone hover:bg-raise">Skip ahead</button>
       </div>
-      <div id="loading" class="absolute inset-0 grid place-items-center text-[13px] text-dim">Loading tab…</div>
+    </div>
+    <div class="relative h-[250px] border-t border-line">
+      <div class="absolute top-2.5 left-4 text-[12px] text-dim"><span class="text-bone">Your guitar's neck.</span> The lit dot is where your finger goes. The outline is the next one.</div>
+      <canvas id="fb" class="absolute inset-x-0 top-6 bottom-0 h-[calc(100%-24px)] w-full" aria-label="Where to put your finger"></canvas>
+    </div>
+      <div id="loading" class="absolute inset-0 grid place-items-center bg-ground text-[13px] text-dim">Loading tab…</div>
       <div id="howto" hidden class="absolute inset-0 grid place-items-center bg-ground/70 p-4 backdrop-blur-[2px]">
         <div class="reveal w-full max-w-[460px] rounded-xl border border-line-strong bg-raise p-5 sm:p-6" role="dialog" aria-labelledby="howto-title">
           <h2 id="howto-title" class="text-[17px] font-semibold tracking-[-0.01em]">How to read this</h2>
           <ol class="mt-4 grid gap-3.5 text-[14px] leading-snug text-dim">
             <li class="grid grid-cols-[22px_1fr]"><span class="font-mono text-faint">1</span><span><span class="text-bone">Each line is one string.</span> <span id="howto-order"></span> The number on the left is the string: 6 is the thickest, 1 the thinnest.</span></li>
-            <li class="grid grid-cols-[22px_1fr]"><span class="font-mono text-faint">2</span><span><span class="text-bone">The number in the box is the fret to press</span> on that string. 0 means play it without pressing anything. × means mute it.</span></li>
+            <li class="grid grid-cols-[22px_1fr]"><span class="font-mono text-faint">2</span><span><span class="text-bone">The number is the fret.</span> Frets are the spaces between the metal bars on the neck, counted from the tuning pegs: fret 1 is the first space next to the pegs, fret 2 the next, and so on. 0 means play the string without pressing. The neck drawing at the bottom shows exactly where your finger goes.</span></li>
             <li class="grid grid-cols-[22px_1fr]"><span class="font-mono text-faint">3</span><span><span class="text-bone">Pick the string when the box reaches the white bar.</span> Outlined boxes are hammer-ons: don't pick, just press.</span></li>
             <li class="grid grid-cols-[22px_1fr]"><span class="font-mono text-faint">4</span><span><span id="howto-tuning-label" class="text-bone"></span> <span id="howto-tuning"></span></span></li>
           </ol>
@@ -185,6 +192,7 @@ export function mountPlayer(
 
   let loaded: LoadedSong | null = null;
   let highway: Highway | null = null;
+  let fretboard: Fretboard | null = null;
   let grader: Grader | null = null;
   const roles = new HandRoles();
   roles.leftHanded = prefs.leftHanded;
@@ -481,6 +489,7 @@ export function mountPlayer(
       countIn = Math.max(1, Math.ceil((transport.countInUntil - t) / beat - 1e-6));
     }
     highway.draw(t, transport.playing, countIn);
+    fretboard?.draw(t);
 
     if (transport.playing && !inCountIn && camera.active) {
       for (const j of grader.advance(t, performance.now() - lastPickSeen < 600)) highway.judge(j);
@@ -564,6 +573,7 @@ export function mountPlayer(
   $('howto-flip').onclick = () => {
     prefs.tabOrder = !prefs.tabOrder;
     if (highway) highway.tabOrder = prefs.tabOrder;
+    if (fretboard) fretboard.tabOrder = prefs.tabOrder;
     savePrefs(prefs);
     syncOrder();
   };
@@ -605,6 +615,8 @@ export function mountPlayer(
       grader = new Grader(l.song);
       highway = new Highway($<HTMLCanvasElement>('hw'), l.song);
       highway.tabOrder = prefs.tabOrder;
+      fretboard = new Fretboard($<HTMLCanvasElement>('fb'), l.song);
+      fretboard.tabOrder = prefs.tabOrder;
       syncOrder();
       // First visit, or a song that needs a peg turned: explain before playing.
       if (!prefs.seenGuide || advice.retune) openHowto();
