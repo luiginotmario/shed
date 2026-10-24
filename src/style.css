@@ -1,0 +1,185 @@
+@import 'tailwindcss';
+
+/* One idea: the nut. Strings at their real gauges run into a bone nut that is
+   the playhead. Everything else stays quiet. Amber is the amp's pilot light
+   and only marks things that are live. */
+@theme {
+  --color-ground: #11100e;
+  --color-raise: #191714;
+  --color-raise-2: #211e1a;
+  --color-line: rgb(236 228 212 / 0.08);
+  --color-line-strong: rgb(236 228 212 / 0.16);
+  --color-bone: #ece4d4;
+  --color-dim: #a39b8e;
+  --color-faint: #6d665c;
+  --color-nickel: #bdb7ac;
+  --color-pilot: #e3a24a;
+
+  --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', monospace;
+
+  --ease-glide: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-leave: cubic-bezier(0.4, 0, 1, 1);
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  background: var(--color-ground);
+  color: var(--color-bone);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'ss01', 'cv11';
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ───────── Press feedback: every pressable shrinks a touch ───────── */
+.press {
+  transition:
+    transform 160ms var(--ease-glide),
+    background-color 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease;
+}
+.press:active {
+  transform: scale(0.97);
+}
+
+/* ───────── Entrances: opacity leads, blur and offset trail ───────── */
+.reveal {
+  animation:
+    reveal-fade 220ms var(--ease-glide) both,
+    reveal-move 340ms var(--ease-glide) both;
+  animation-delay: var(--delay, 0ms);
+}
+@keyframes reveal-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes reveal-move {
+  from {
+    filter: blur(4px);
+    transform: translateY(8px);
+  }
+}
+
+/* ───────── Pilot light ───────── */
+.pilot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-faint);
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+[aria-pressed='true'] .pilot,
+.pilot[data-on='true'] {
+  background: var(--color-pilot);
+  box-shadow: 0 0 8px rgb(227 162 74 / 0.6);
+}
+
+/* ───────── Coaching hint ───────── */
+.hint {
+  transition:
+    opacity 220ms var(--ease-glide),
+    transform 300ms var(--ease-glide),
+    filter 300ms var(--ease-glide);
+  @starting-style {
+    opacity: 0;
+    transform: translateY(6px);
+    filter: blur(4px);
+  }
+}
+.hint[data-leaving] {
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 180ms var(--ease-leave),
+    transform 180ms var(--ease-leave);
+}
+
+/* ───────── Speed slider ───────── */
+input[type='range'].speed {
+  appearance: none;
+  background: transparent;
+  height: 20px;
+}
+input[type='range'].speed::-webkit-slider-runnable-track {
+  height: 2px;
+  background: var(--color-line-strong);
+  border-radius: 1px;
+}
+input[type='range'].speed::-webkit-slider-thumb {
+  appearance: none;
+  width: 4px;
+  height: 16px;
+  margin-top: -7px;
+  border-radius: 1px;
+  background: var(--color-bone);
+}
+input[type='range'].speed::-moz-range-track {
+  height: 2px;
+  background: var(--color-line-strong);
+}
+input[type='range'].speed::-moz-range-thumb {
+  width: 4px;
+  height: 16px;
+  border: 0;
+  border-radius: 1px;
+  background: var(--color-bone);
+}
+
+select.track {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='%23a39b8e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+select.track option {
+  background: var(--color-raise);
+}
+
+:focus-visible {
+  outline: 1.5px solid var(--color-bone);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    animation: reveal-fade 200ms ease both;
+  }
+  .hint,
+  .hint[data-leaving] {
+    transform: none;
+    filter: none;
+    @starting-style {
+      transform: none;
+      filter: none;
+    }
+  }
+  .press:active {
+    transform: none;
+  }
+}
+
+/* The search field's frame shows focus; the input itself doesn't need a ring. */
+input[type='search']:focus-visible {
+  outline: none;
+}
+input[type='search']::-webkit-search-cancel-button {
+  appearance: none;
+}

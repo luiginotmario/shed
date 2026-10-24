@@ -1,0 +1,3 @@
+{
+  "rewrites": [{ "source": "/songsterr/:path*", "destination": "https://www.songsterr.com/api/:path*" }]
+}

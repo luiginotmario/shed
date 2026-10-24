@@ -1,0 +1,27 @@
+{
+  "name": "shed",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Guitar practice in the browser: search any song, play along, and get coached by hand tracking.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "postinstall": "node scripts/fetch-vision.mjs"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^1.1.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}
